@@ -51,7 +51,7 @@ pipeline {
            steps {
               script {
                 sh '''
-                   curl -v 172.17.0.1:$APP_EXPOSED_PORT | grep -q "Hello world!"
+                   curl -v 54.90.228.74:$APP_EXPOSED_PORT | grep -q "Hello world!"
                 '''
               }
            }
