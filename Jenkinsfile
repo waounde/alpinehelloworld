@@ -1,18 +1,18 @@
 pipeline {
     environment {
-        IMAGE_NAME = "alpinehelloworld"                    /*alpinehelloworld par exemple*/
-        APP_EXPOSED_PORT = "80"            /*80 par défaut*/
-        APP_NAME = "eazytrainin"                        /*eazytraining par exemple*/
-        IMAGE_TAG = "latest"                      /*tag docker, par exemple latest*/
+        IMAGE_NAME = "${PARAM_IMAGE_NAME}"                    /*alpinehelloworld par exemple*/
+        APP_EXPOSED_PORT = "${PARAM_PORT_EXPOSED}"            /*80 par défaut*/
+        APP_NAME = "${PARAM_APP_NAME}"                        /*eazytraining par exemple*/
+        IMAGE_TAG = "${PARAM_IMAGE_TAG}"                      /*tag docker, par exemple latest*/
         STAGING = "${PARAM_APP_NAME}-staging"
         PRODUCTION = "${PARAM_APP_NAME}-prod"
-        DOCKERHUB_ID = "blondel"
+        DOCKERHUB_ID = "${PARAM_DOCKERHUB_ID}"
         DOCKERHUB_PASSWORD = credentials('dockerhub')
-        STG_API_ENDPOINT = "ip10-0-2-4-cq7drv3j2epg008u778g-1993.direct.docker.labs.eazytraining.fr"        /* Mettre le couple IP:PORT de votre API eazylabs, exemple 100.25.147.76:1993 */
-        STG_APP_ENDPOINT = "ip10-0-2-4-cq7drv3j2epg008u778g-80.direct.docker.labs.eazytraining.fr"        /* Mettre le couple IP:PORT votre application en staging, exemple 100.25.147.76:8000 */
-        PROD_API_ENDPOINT = "ip10-0-2-6-cq7drv3j2epg008u778g-1993.direct.docker.labs.eazytraining.fr"      /* Mettre le couple IP:PORT de votre API eazylabs, 100.25.147.76:1993 */
-        PROD_APP_ENDPOINT = "ip10-0-2-6-cq7drv3j2epg008u778g-80.direct.docker.labs.eazytraining.fr"      /* Mettre le couple IP:PORT votre application en production, exemple 100.25.147.76 */
-        INTERNAL_PORT = "5000"              /*5000 par défaut*/
+        STG_API_ENDPOINT = "${PARAM_STG_API_ENDPOINT}"        /* Mettre le couple IP:PORT de votre API eazylabs, exemple 100.25.147.76:1993 */
+        STG_APP_ENDPOINT = "${PARAM_STG_APP_ENDPOINT}"        /* Mettre le couple IP:PORT votre application en staging, exemple 100.25.147.76:8000 */
+        PROD_API_ENDPOINT = "${PARAM_PROD_API_ENDPOINT}"      /* Mettre le couple IP:PORT de votre API eazylabs, 100.25.147.76:1993 */
+        PROD_APP_ENDPOINT = "${PARAM_PROD_APP_ENDPOINT}"      /* Mettre le couple IP:PORT votre application en production, exemple 100.25.147.76 */
+        INTERNAL_PORT = "${PARAM_INTERNAL_PORT}"              /*5000 par défaut*/
         EXTERNAL_PORT = "${PARAM_PORT_EXPOSED}"
         CONTAINER_IMAGE = "${DOCKERHUB_ID}/${IMAGE_NAME}:${IMAGE_TAG}"
     }
@@ -51,7 +51,7 @@ pipeline {
            steps {
               script {
                 sh '''
-                   curl -v 54.90.228.74:$APP_EXPOSED_PORT | grep -q "Hello world!"
+                   curl -v 172.17.0.1:$APP_EXPOSED_PORT | grep -q "Hello world!"
                 '''
               }
            }
@@ -80,5 +80,32 @@ pipeline {
           }
       }
 
+      stage('STAGING - Deploy app') {
+      agent any
+      steps {
+          script {
+            sh """
+              echo  {\\"your_name\\":\\"${APP_NAME}\\",\\"container_image\\":\\"${CONTAINER_IMAGE}\\", \\"external_port\\":\\"${EXTERNAL_PORT}00\\", \\"internal_port\\":\\"${INTERNAL_PORT}\\"}  > data.json 
+              curl -v -X POST http://${STG_API_ENDPOINT}/staging -H 'Content-Type: application/json'  --data-binary @data.json  2>&1 | grep 200
+            """
+          }
+        }
+     
+     }
+     stage('PROD - Deploy app') {
+       when {
+           expression { GIT_BRANCH == 'origin/main' }
+       }
+     agent any
+
+       steps {
+          script {
+            sh """
+              echo  {\\"your_name\\":\\"${APP_NAME}\\",\\"container_image\\":\\"${CONTAINER_IMAGE}\\", \\"external_port\\":\\"${EXTERNAL_PORT}\\", \\"internal_port\\":\\"${INTERNAL_PORT}\\"}  > data.json 
+              curl -v -X POST http://${PROD_API_ENDPOINT}/prod -H 'Content-Type: application/json'  --data-binary @data.json  2>&1 | grep 200
+            """
+          }
+       }
+     }
   }
 }
