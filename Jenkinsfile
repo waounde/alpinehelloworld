@@ -52,7 +52,7 @@ pipeline {
             }
         }
 
-        stage ('Login and Push Image on docker hub') {
+        stage ('Login and Push Image on dockerhub') {
             agent any           
             steps {
                 script {
