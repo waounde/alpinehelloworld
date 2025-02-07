@@ -71,20 +71,16 @@ pipeline {
             }
             steps {
               script{
-                sshagent(credentials: ['SSH_AUTH_SERVER']) {
-                    sh '''
-                        command1="docker login -u $DOCKERHUB_AUTH_USR -p $DOCKERHUB_AUTH_PSW"
-                        command2="docker pull $DOCKERHUB_AUTH_USR/$IMAGE_NAME:$IMAGE_TAG"
-                        command3="docker rm -f webapp || echo 'app does not exist'"
-                        command4="docker run -d -p 80:5000 -e PORT=5000 --name webapp $DOCKERHUB_AUTH_USR/$IMAGE_NAME:$IMAGE_TAG"
-                        ssh -tt ubuntu@${HOSTNAME_DEPLOY_STAGING} \
-                            -o SendEnv=IMAGE_NAME \
-                            -o SendEnv=IMAGE_TAG \
-                            -o SendEnv=DOCKERHUB_AUTH_USR \
-                            -o SendEnv=DOCKERHUB_AUTH_PSW \
-                            -C "$command1 && $command2 && $command3 && $command4"
-                    '''
-                }
+                    echo "deploying to shell-script to ec2"
+                    def pullcmd="docker pull ${ID_DOCKER}/${IMAGE_NAME}:${IMAGE_TAG}"
+                    def stopcmd=" docker stop ${IMAGE_NAME} || echo 'Container not running'"
+                    def rmvcmd=" docker rm ${IMAGE_NAME} || echo 'Container not found'"
+                    def runcmd="docker run -d -p $PORT_EXPOSED:5000 -e PORT=5000 --name ${IMAGE_NAME} ${ID_DOCKER}/${IMAGE_NAME}:${IMAGE_TAG}"
+                    sshagent(['SSH_AUTH_SERVER']){
+                       sh "ssh -o StrictHostKeyChecking=no ubuntu@${HOSTNAME_DEPLOY_STAGING} ${stopcmd}"
+                       sh "ssh -o StrictHostKeyChecking=no ubuntu@${HOSTNAME_DEPLOY_STAGING} ${rmvcmd}"
+                       sh "ssh -o StrictHostKeyChecking=no ubuntu@${HOSTNAME_DEPLOY_STAGING} ${pullcmd}"
+                       sh "ssh -o StrictHostKeyChecking=no ubuntu@${HOSTNAME_DEPLOY_STAGING} ${runcmd}"
               }
             }
         }
@@ -95,24 +91,18 @@ pipeline {
                 HOSTNAME_DEPLOY_PROD = "ec2-52-71-142-24.compute-1.amazonaws.com"
             }
             steps {
-                sshagent(credentials:['SSH_AUTH_SERVER']) {
-                    sh '''
-                        [ -d ~/.ssh ] || mkdir ~/.ssh && chmod 0700 ~/.ssh
-                        ssh-keyscan -t rsa,dsa ${HOSTNAME_DEPLOY_PROD} >> ~/.ssh/known_hosts
-                        command1="docker login -u $DOCKERHUB_AUTH_USR -p $DOCKERHUB_AUTH_PSW"
-                        command2="docker pull $DOCKERHUB_AUTH_USR/$IMAGE_NAME:$IMAGE_TAG"
-                        command3="docker rm -f webapp || echo 'app does not exist'"
-                        command4="docker run -d -p 80:5000 -e PORT=5000 --name webapp $DOCKERHUB_AUTH_USR/$IMAGE_NAME:$IMAGE_TAG"
-                        ssh -t ubuntu@${HOSTNAME_DEPLOY_PROD} \
-                            -o SendEnv=IMAGE_NAME \
-                            -o SendEnv=IMAGE_TAG \
-                            -o SendEnv=DOCKERHUB_AUTH_USR \
-                            -o SendEnv=DOCKERHUB_AUTH_PSW \
-                            -C "$command1 && $command2 && $command3 && $command4"
-                    '''
-                }
-            }
-        }
+              script{
+                    echo "deploying to shell-script to ec2"
+                    def pullcmd="docker pull ${ID_DOCKER}/${IMAGE_NAME}:${IMAGE_TAG}"
+                    def stopcmd=" docker stop ${IMAGE_NAME} || echo 'Container not running'"
+                    def rmvcmd=" docker rm ${IMAGE_NAME} || echo 'Container not found'"
+                    def runcmd="docker run -d -p $PORT_EXPOSED:5000 -e PORT=5000 --name ${IMAGE_NAME} ${ID_DOCKER}/${IMAGE_NAME}:${IMAGE_TAG}"
+                    sshagent(['SSH_AUTH_SERVER']){
+                       sh "ssh -o StrictHostKeyChecking=no ubuntu@${HOSTNAME_DEPLOY_STAGING} ${stopcmd}"
+                       sh "ssh -o StrictHostKeyChecking=no ubuntu@${HOSTNAME_DEPLOY_STAGING} ${rmvcmd}"
+                       sh "ssh -o StrictHostKeyChecking=no ubuntu@${HOSTNAME_DEPLOY_STAGING} ${pullcmd}"
+                       sh "ssh -o StrictHostKeyChecking=no ubuntu@${HOSTNAME_DEPLOY_STAGING} ${runcmd}"
+              }
 
     }
 }
