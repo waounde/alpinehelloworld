@@ -81,6 +81,7 @@ pipeline {
                        sh "ssh -o StrictHostKeyChecking=no ubuntu@${HOSTNAME_DEPLOY_STAGING} ${rmvcmd}"
                        sh "ssh -o StrictHostKeyChecking=no ubuntu@${HOSTNAME_DEPLOY_STAGING} ${pullcmd}"
                        sh "ssh -o StrictHostKeyChecking=no ubuntu@${HOSTNAME_DEPLOY_STAGING} ${runcmd}"
+                    }       
               }
             }
         }
@@ -102,7 +103,10 @@ pipeline {
                        sh "ssh -o StrictHostKeyChecking=no ubuntu@${HOSTNAME_DEPLOY_STAGING} ${rmvcmd}"
                        sh "ssh -o StrictHostKeyChecking=no ubuntu@${HOSTNAME_DEPLOY_STAGING} ${pullcmd}"
                        sh "ssh -o StrictHostKeyChecking=no ubuntu@${HOSTNAME_DEPLOY_STAGING} ${runcmd}"
-              }
-
+                }
+            }
+        }
     }
+  }
+
 }
