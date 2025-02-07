@@ -29,7 +29,7 @@ pipeline {
             }
         }
 
-        stage('Test image') {
+        stage('Test Image') {
             agent any
             steps {
                 script {
