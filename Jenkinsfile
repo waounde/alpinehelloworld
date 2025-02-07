@@ -70,6 +70,7 @@ pipeline {
                 HOSTNAME_DEPLOY_STAGING = "ec2-18-215-143-212.compute-1.amazonaws.com"
             }
             steps {
+              script{
                 sshagent(credentials: ['SSH_AUTH_SERVER']) {
                     sh '''
                         [ -d ~/.ssh ] || mkdir ~/.ssh && chmod 0700 ~/.ssh
@@ -86,6 +87,7 @@ pipeline {
                             -C "$command1 && $command2 && $command3 && $command4"
                     '''
                 }
+              }
             }
         }
 
