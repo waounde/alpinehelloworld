@@ -6,7 +6,7 @@ pipeline {
         PORT_EXPOSED = "80"
     }
     stages {
-        stage ('Build image') {
+        stage ('Build Image') {
             agent any
             steps {
                 script {
