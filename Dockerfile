@@ -1,19 +1,19 @@
 # Utiliser l'image Alpine la plus récente
 FROM alpine:latest
 
-# Installer Python, pip et bash
+# Installer Python, pip, bash, et les outils nécessaires pour créer un environnement virtuel
 RUN apk add --no-cache --update python3 py3-pip bash python3-dev libffi-dev
 
 # Installer virtualenv pour gérer les environnements virtuels
 RUN pip3 install --no-cache-dir virtualenv
 
-# Créer un environnement virtuel dans le dossier /opt/venv
+# Créer un environnement virtuel dans /opt/venv
 RUN python3 -m venv /opt/venv
 
-# Activer l'environnement virtuel en modifiant le PATH
+# Modifier le PATH pour que l'environnement virtuel soit activé par défaut
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Ajouter le fichier requirements.txt dans le container
+# Ajouter le fichier requirements.txt dans le conteneur
 ADD ./webapp/requirements.txt /tmp/requirements.txt
 
 # Installer les dépendances dans l'environnement virtuel
