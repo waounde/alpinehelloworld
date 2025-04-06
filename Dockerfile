@@ -1,31 +1,45 @@
-# Utiliser l'image Alpine la plus récente
+# Utiliser une version spécifique d'Alpine pour la reproductibilité
 FROM alpine:latest
 
-# Installer Python, pip, bash, et les outils nécessaires pour créer un environnement virtuel
-RUN apk add --no-cache --update python3 py3-pip bash python3-dev libffi-dev
+# Installer les dépendances système nécessaires
+RUN apk add --no-cache --update \
+    python3 \
+    py3-pip \
+    bash \
+    python3-dev \
+    libffi-dev \
+    gcc \
+    musl-dev \
+    libffi-dev
 
-# Installer virtualenv pour gérer les environnements virtuels
-RUN pip3 install --no-cache-dir virtualenv
-
-# Créer un environnement virtuel dans /opt/venv
+# Créer l'environnement virtuel avant d'installer les dépendances
 RUN python3 -m venv /opt/venv
 
-# Modifier le PATH pour que l'environnement virtuel soit activé par défaut
+# Configurer le PATH pour l'environnement virtuel
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Ajouter le fichier requirements.txt dans le conteneur
-ADD ./webapp/requirements.txt /tmp/requirements.txt
+# Installer pip et setuptools à jour dans l'environnement virtuel
+RUN pip install --no-cache-dir --upgrade pip setuptools
 
-# Installer les dépendances dans l'environnement virtuel
+# Copier le fichier requirements séparément pour optimiser le cache
+COPY ./webapp/requirements.txt /tmp/requirements.txt
+
+# Installer les dépendances Python dans l'environnement virtuel
 RUN pip install --no-cache-dir -r /tmp/requirements.txt
 
 # Ajouter le code de l'application
-ADD ./webapp /opt/webapp/
+COPY ./webapp /opt/webapp/
 WORKDIR /opt/webapp
 
-# Créer un utilisateur non-root pour des raisons de sécurité
-RUN adduser -D myuser
+# Créer un utilisateur non-root avec un répertoire personnel
+RUN adduser -D -h /home/myuser -s /bin/sh myuser && \
+    chown -R myuser:myuser /opt/webapp
+
+# Basculer vers l'utilisateur non-root
 USER myuser
 
-# Exécuter l'application. Le port sera défini par Heroku.
-CMD gunicorn --bind 0.0.0.0:$PORT wsgi
+# Configurer la variable d'environnement PORT avec une valeur par défaut
+ENV PORT=8000
+
+# Commande d'exécution avec paramètre configurable
+CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT} wsgi"]
