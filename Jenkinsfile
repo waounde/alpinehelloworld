@@ -8,7 +8,7 @@ pipeline {
         IMAGE_TAG = "v2.4"
     }
     stages {
-        stage ('Build images') {
+        stage ('Build image') {
             agent any
             steps {
                 script {
