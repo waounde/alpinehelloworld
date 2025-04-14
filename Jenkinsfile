@@ -2,7 +2,7 @@ pipeline {
     agent none
     environment {
         DOCKERHUB_AUTH = credentials('docker')
-        IMAGE_NAME = "your-image-name" // Remplacez par le nom de votre image
+        IMAGE_NAME = "alpinehelloworld" // Remplacez par le nom de votre image
         IMAGE_TAG = "latest" // Remplacez par le tag de votre image
         PORT_EXPOSED = "80"
         HOSTNAME_DEPLOY_PROD = "ec2-15-237-191-5.eu-west-3.compute.amazonaws.com"
