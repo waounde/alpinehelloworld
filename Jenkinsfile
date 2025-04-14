@@ -1,135 +1,136 @@
 pipeline {
     agent none
     environment {
-        DOCKERHUB_AUTH = credentials('docker')  // Prendre en compte l'identification Docker Hub
-        ID_DOCKER = "${DOCKERHUB_AUTH_USR}"    // Utilisation du secret pour l'utilisateur Docker
+        DOCKERHUB_AUTH = credentials('docker')
+        IMAGE_NAME = "your-image-name" // Remplacez par le nom de votre image
+        IMAGE_TAG = "latest" // Remplacez par le tag de votre image
         PORT_EXPOSED = "80"
-        IMAGE_NAME = "alpinehelloworld"         // Définir IMAGE_NAME si ce n'est pas déjà défini
-        IMAGE_TAG = "latest"                   // Définir IMAGE_TAG si ce n'est pas déjà défini
+        HOSTNAME_DEPLOY_PROD = "ec2-15-237-191-5.eu-west-3.compute.amazonaws.com"
+        HOSTNAME_DEPLOY_STAGING = "ec2-13-37-227-8.eu-west-3.compute.amazonaws.com"
+        SSH_CREDENTIALS_STAGING = 'SSH_AUTH_SERVER'
+        SSH_CREDENTIALS_PROD = 'SSH_AUTH_PROD'
     }
     stages {
-        stage('Build Image') {
+        stage('Build Docker Image') {
             agent any
             steps {
                 script {
-                    echo "Building Docker image..."
-                    sh 'docker build -t ${ID_DOCKER}/${IMAGE_NAME}:${IMAGE_TAG} .'
-                }
-            }
-        }
-
-        stage('Run container based on built image') {
-            agent any
-            steps {
-                script {
-                    echo "Cleaning up environment..."
-                    // Supprimer le conteneur existant si nécessaire
                     sh '''
-                        docker rm -f ${IMAGE_NAME} || echo "Container ${IMAGE_NAME} does not exist"
-                        docker run --name ${IMAGE_NAME} -d -p ${PORT_EXPOSED}:5000 -e PORT=5000 ${ID_DOCKER}/${IMAGE_NAME}:${IMAGE_TAG}
-                        sleep 5  # Temps d'attente pour s'assurer que l'application a démarré
+                        echo "Building Docker image..."
+                        docker build -t ${DOCKERHUB_AUTH_USR}/${IMAGE_NAME}:${IMAGE_TAG} .
                     '''
                 }
             }
         }
 
-        stage('Test image') {
+        stage('Run Local Container') {
             agent any
             steps {
                 script {
-                    echo "Testing the image..."
-                    // Vérification de l'exécution du conteneur et test de la réponse HTTP
                     sh '''
-                        docker ps  # Vérifier si le conteneur est en cours d'exécution
-
-                        # Tester la connexion via localhost
-                        curl http://127.0.0.1:${PORT_EXPOSED} | grep -q "Hello world Lewis!" || echo "Test failed: Response not as expected"
+                        echo "Cleaning up existing container..."
+                        docker rm -f ${IMAGE_NAME} || echo "No existing container to remove"
+                        echo "Running container locally..."
+                        docker run --name ${IMAGE_NAME} -d -p ${PORT_EXPOSED}:5000 -e PORT=5000 ${DOCKERHUB_AUTH_USR}/${IMAGE_NAME}:${IMAGE_TAG}
+                        sleep 5
                     '''
                 }
             }
         }
 
-        stage('Clean Container') {
+        stage('Test Local Container') {
             agent any
             steps {
                 script {
-                    echo "Stopping and removing the container..."
-                    // Arrêter et supprimer le conteneur
                     sh '''
-                        docker stop ${IMAGE_NAME}
-                        docker rm ${IMAGE_NAME}
+                        echo "Testing local container..."
+                        curl -s http://localhost:${PORT_EXPOSED} | grep -q "Hello world Lewis!" || exit 1
                     '''
                 }
             }
         }
 
-        stage('Login and Push Image on Docker Hub') {
+        stage('Push Docker Image to Docker Hub') {
             agent any
             steps {
                 script {
-                    echo "Logging in to Docker Hub and pushing the image..."
-                    // Se connecter à Docker Hub et pousser l'image
                     sh '''
+                        echo "Logging into Docker Hub..."
                         docker login -u ${DOCKERHUB_AUTH_USR} -p ${DOCKERHUB_AUTH_PSW}
-                        docker push ${ID_DOCKER}/${IMAGE_NAME}:${IMAGE_TAG}
+                        echo "Pushing Docker image to Docker Hub..."
+                        docker push ${DOCKERHUB_AUTH_USR}/${IMAGE_NAME}:${IMAGE_TAG}
                     '''
                 }
             }
         }
 
-        stage('Deploy in Staging') {
+        stage('Deploy to Staging') {
             agent any
-            environment {
-                HOSTNAME_DEPLOY_STAGING = "ec2-13-37-227-8.eu-west-3.compute.amazonaws.com"
+            steps {
+                sshagent(credentials: [SSH_CREDENTIALS_STAGING]) {
+                    sh '''
+                        echo "Deploying to Staging..."
+                        ssh-keyscan -H ${HOSTNAME_DEPLOY_STAGING} >> ~/.ssh/known_hosts
+                        ssh centos@${HOSTNAME_DEPLOY_STAGING} << EOF
+                            docker login -u ${DOCKERHUB_AUTH_USR} -p ${DOCKERHUB_AUTH_PSW}
+                            docker pull ${DOCKERHUB_AUTH_USR}/${IMAGE_NAME}:${IMAGE_TAG}
+                            docker rm -f webapp || echo "No existing container to remove"
+                            docker run -d -p 80:5000 -e PORT=5000 --name webapp ${DOCKERHUB_AUTH_USR}/${IMAGE_NAME}:${IMAGE_TAG}
+                        EOF
+                    '''
+                }
             }
+        }
+
+        stage('Test Staging') {
+            agent any
             steps {
                 script {
                     sh '''
-                        # Configurer les clés SSH manuellement
-                        mkdir -p ~/.ssh
-                        cp /var/lib/jenkins/.ssh/my_private_key ~/.ssh/id_rsa
-                        chmod 600 ~/.ssh/id_rsa
-                        ssh-keyscan -t rsa,dsa ${HOSTNAME_DEPLOY_STAGING} >> ~/.ssh/known_hosts
-                        
-                        command1="docker login -u ${DOCKERHUB_AUTH_USR} -p ${DOCKERHUB_AUTH_PSW}"
-                        command2="docker pull ${DOCKERHUB_AUTH_USR}/${IMAGE_NAME}:${IMAGE_TAG}"
-                        command3="docker rm -f webapp || echo 'App does not exist'"
-                        command4="docker run -d -p 80:5000 -e PORT=5000 --name webapp ${DOCKERHUB_AUTH_USR}/${IMAGE_NAME}:${IMAGE_TAG}"
-                        
-                        ssh -t centos@${HOSTNAME_DEPLOY_STAGING} "$command1 && $command2 && $command3 && $command4"
+                        echo "Testing Staging environment..."
+                        curl -s http://${HOSTNAME_DEPLOY_STAGING} | grep -q "Hello world!" || exit 1
                     '''
                 }
             }
         }
 
-        stage('Deploy in Prod') {
+        stage('Deploy to Production') {
             agent any
-            environment {
-                HOSTNAME_DEPLOY_PROD = "ec2-15-237-191-5.eu-west-3.compute.amazonaws.com"
-            }
             steps {
-                sshagent(credentials: ['SSH_AUTH_PROD']) {
-                    echo "Deploying to production server..."
+                sshagent(credentials: [SSH_CREDENTIALS_PROD]) {
                     sh '''
-                        # Préparer l'environnement SSH
-                        [ -d ~/.ssh ] || mkdir -p ~/.ssh && chmod 0700 ~/.ssh
-                        ssh-keyscan -t rsa,dsa ${HOSTNAME_DEPLOY_PROD} >> ~/.ssh/known_hosts
-
-                        # Déployer l'image sur le serveur de production
-                        command1="docker login -u ${DOCKERHUB_AUTH_USR} -p ${DOCKERHUB_AUTH_PSW}"
-                        command2="docker pull ${DOCKERHUB_AUTH_USR}/${IMAGE_NAME}:${IMAGE_TAG}"
-                        command3="docker rm -f webapp || echo 'App does not exist'"
-                        command4="docker run -d -p 80:5000 -e PORT=5000 --name webapp ${DOCKERHUB_AUTH_USR}/${IMAGE_NAME}:${IMAGE_TAG}"
-
-                        ssh -t centos@${HOSTNAME_DEPLOY_PROD} \
-                            -o SendEnv=IMAGE_NAME \
-                            -o SendEnv=IMAGE_TAG \
-                            -o SendEnv=DOCKERHUB_AUTH_USR \
-                            -o SendEnv=DOCKERHUB_AUTH_PSW \
-                            -C "$command1 && $command2 && $command3 && $command4"
+                        echo "Deploying to Production..."
+                        ssh-keyscan -H ${HOSTNAME_DEPLOY_PROD} >> ~/.ssh/known_hosts
+                        ssh centos@${HOSTNAME_DEPLOY_PROD} << EOF
+                            docker login -u ${DOCKERHUB_AUTH_USR} -p ${DOCKERHUB_AUTH_PSW}
+                            docker pull ${DOCKERHUB_AUTH_USR}/${IMAGE_NAME}:${IMAGE_TAG}
+                            docker rm -f webapp || echo "No existing container to remove"
+                            docker run -d -p 80:5000 -e PORT=5000 --name webapp ${DOCKERHUB_AUTH_USR}/${IMAGE_NAME}:${IMAGE_TAG}
+                        EOF
                     '''
                 }
             }
+        }
+
+        stage('Test Production') {
+            agent any
+            steps {
+                script {
+                    sh '''
+                        echo "Testing Production environment..."
+                        curl -s http://${HOSTNAME_DEPLOY_PROD} | grep -q "Hello world!" || exit 1
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            slackSend(color: '#00FF00', message: "SUCCESSFUL: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (${env.BUILD_URL})")
+        }
+        failure {
+            slackSend(color: '#FF0000', message: "FAILED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (${env.BUILD_URL})")
         }
     }
 }
