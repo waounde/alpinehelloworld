@@ -1,104 +1,118 @@
 pipeline {
-    environment {
-        IMAGE_NAME = "${PARAM_IMAGE_NAME}"                    /*alpinehelloworld par exemple*/
-        APP_EXPOSED_PORT = "${PARAM_PORT_EXPOSED}"            /*80 par défaut*/
-        APP_NAME = "${PARAM_APP_NAME}"                        /*eazytraining par exemple*/
-        IMAGE_TAG = "${PARAM_IMAGE_TAG}"                      /*tag docker, par exemple latest*/
-        STAGING = "${PARAM_APP_NAME}-staging"
-        PRODUCTION = "${PARAM_APP_NAME}-prod"
-        DOCKERHUB_ID = "choco1992"
-        DOCKERHUB_PASSWORD = credentials('dockerhub')
-        STG_API_ENDPOINT = "${PARAM_STG_API_ENDPOINT}"        /* Mettre le couple IP:PORT de votre API eazylabs, exemple 100.25.147.76:1993 */
-        STG_APP_ENDPOINT = "${PARAM_STG_APP_ENDPOINT}"        /* Mettre le couple IP:PORT votre application en staging, exemple 100.25.147.76:8000 */
-        PROD_API_ENDPOINT = "${PARAM_PROD_API_ENDPOINT}"      /* Mettre le couple IP:PORT de votre API eazylabs, 100.25.147.76:1993 */
-        PROD_APP_ENDPOINT = "${PARAM_PROD_APP_ENDPOINT}"      /* Mettre le couple IP:PORT votre application en production, exemple 100.25.147.76 */
-        INTERNAL_PORT = "${PARAM_INTERNAL_PORT}"              /*5000 par défaut*/
-        EXTERNAL_PORT = "${PARAM_PORT_EXPOSED}"
-        CONTAINER_IMAGE = "${DOCKERHUB_ID}/${IMAGE_NAME}:${IMAGE_TAG}"
-    }
     agent none
+    environment {
+        DOCKERHUB_AUTH = credentials('DOCKERHUB_AUTH')
+        ID_DOCKER = "${DOCKERHUB_AUTH_USR}"
+        PORT_EXPOSED = "80"
+    }
     stages {
-       stage('Build image') {
-           agent any
-           steps {
-              script {
-                sh 'docker build -t ${DOCKERHUB_ID}/$IMAGE_NAME:$IMAGE_TAG .'
-              }
-           }
-       }
-       stage('Run container based on builded image') {
-          agent any
-          steps {
-            script {
-              sh '''
-                  echo "Cleaning existing container if exist"
-                  docker ps -a | grep -i $IMAGE_NAME && docker rm -f $IMAGE_NAME
-                  docker run --name $IMAGE_NAME -d -p $APP_EXPOSED_PORT:$INTERNAL_PORT  -e PORT=$INTERNAL_PORT ${DOCKERHUB_ID}/$IMAGE_NAME:$IMAGE_TAG
-                  sleep 5
-              '''
-             }
-          }
-       }
-       stage('Test image') {
-           agent any
-           steps {
-              script {
-                sh '''
-                   curl -v 172.17.0.1:$APP_EXPOSED_PORT | grep -q "Hello world!"
-                '''
-              }
-           }
-       }
-       stage('Clean container') {
-          agent any
-          steps {
-             script {
-               sh '''
-                   docker stop $IMAGE_NAME
-                   docker rm $IMAGE_NAME
-               '''
-             }
-          }
-      }
-
-      stage ('Login and Push Image on docker hub') {
-          agent any
-          steps {
-             script {
-               sh '''
-                   echo $DOCKERHUB_PASSWORD_PSW | docker login -u $DOCKERHUB_PASSWORD_USR --password-stdin
-                   docker push ${DOCKERHUB_ID}/$IMAGE_NAME:$IMAGE_TAG
-               '''
-             }
-          }
-      }
-
-      stage('STAGING - Deploy app') {
-      agent any
-      steps {
-          script {
-            sh """
-              echo  {\\"your_name\\":\\"${APP_NAME}\\",\\"container_image\\":\\"${CONTAINER_IMAGE}\\", \\"external_port\\":\\"${EXTERNAL_PORT}00\\", \\"internal_port\\":\\"${INTERNAL_PORT}\\"}  > data.json 
-              curl -v -X POST http://${STG_API_ENDPOINT}/staging -H 'Content-Type: application/json'  --data-binary @data.json  2>&1 | grep 200
-            """
-          }
+        stage ('Build Image') {
+            agent any
+            steps {
+                script {
+                    sh 'docker build -t ${ID_DOCKER}/${IMAGE_NAME}:${IMAGE_TAG} .'
+                }
+            }
         }
-     
-     }
-     stage('PROD - Deploy app') {
-       when {
-           expression { GIT_BRANCH == 'origin/main' }
-       }
-     agent any
 
-       steps {
-          script {
-            sh """
-              echo  {\\"your_name\\":\\"${APP_NAME}\\",\\"container_image\\":\\"${CONTAINER_IMAGE}\\", \\"external_port\\":\\"${EXTERNAL_PORT}\\", \\"internal_port\\":\\"${INTERNAL_PORT}\\"}  > data.json 
-              curl -v -X POST http://${PROD_API_ENDPOINT}/prod -H 'Content-Type: application/json'  --data-binary @data.json  2>&1 | grep 200
-            """
-          }
-       }
-     }
-  }
+        stage('Run container based on builded image') {
+            agent any
+            steps {
+               script {
+                 sh '''
+                    echo "Clean Environment"
+                    docker rm -f $IMAGE_NAME || echo "container does not exist"
+                    docker run --name $IMAGE_NAME -d -p ${PORT_EXPOSED}:5000 -e PORT=5000 ${ID_DOCKER}/$IMAGE_NAME:$IMAGE_TAG
+                    sleep 5
+                 '''
+               }
+            }
+        }
+
+        stage('Test image') {
+            agent any
+            steps {
+                script {
+                    sh '''
+                        curl http://172.17.0.1:${PORT_EXPOSED} | grep -q "Hello world Lewis!"
+                    '''
+                }
+            }
+        }
+
+        stage('Clean Container') {
+            agent any
+            steps {
+                script {
+                    sh '''
+                        docker stop $IMAGE_NAME
+                        docker rm $IMAGE_NAME
+                    '''
+                }
+            }
+        }
+
+        stage ('Login and Push Image on docker hub') {
+            agent any           
+            steps {
+                script {
+                    sh '''
+                        docker login -u $DOCKERHUB_AUTH_USR -p $DOCKERHUB_AUTH_PSW
+                        docker push ${ID_DOCKER}/$IMAGE_NAME:$IMAGE_TAG
+                    '''
+                }
+            }
+        }
+
+        stage ('Deploy in staging') {
+            agent any
+            environment {
+                HOSTNAME_DEPLOY_STAGING = "ec2-13-37-227-8.eu-west-3.compute.amazonaws.com"
+            }
+            steps {
+                sshagent(credentials: ['SSH_AUTH_SERVER']) {
+                    sh '''
+                        [ -d ~/.ssh ] || mkdir ~/.ssh && chmod 0700 ~/.ssh
+                        ssh-keyscan -t rsa,dsa ${HOSTNAME_DEPLOY_STAGING} >> ~/.ssh/known_hosts
+                        command1="docker login -u $DOCKERHUB_AUTH_USR -p $DOCKERHUB_AUTH_PSW"
+                        command2="docker pull $DOCKERHUB_AUTH_USR/$IMAGE_NAME:$IMAGE_TAG"
+                        command3="docker rm -f webapp || echo 'app does not exist'"
+                        command4="docker run -d -p 80:5000 -e PORT=5000 --name webapp $DOCKERHUB_AUTH_USR/$IMAGE_NAME:$IMAGE_TAG"
+                        ssh -t centos@${HOSTNAME_DEPLOY_STAGING} \
+                            -o SendEnv=IMAGE_NAME \
+                            -o SendEnv=IMAGE_TAG \
+                            -o SendEnv=DOCKERHUB_AUTH_USR \
+                            -o SendEnv=DOCKERHUB_AUTH_PSW \
+                            -C "$command1 && $command2 && $command3 && $command4"
+                    '''
+                }
+            }
+        }
+
+        stage ('Deploy in prod') {
+            agent any
+            environment {
+                HOSTNAME_DEPLOY_PROD = "ec2-15-237-191-5.eu-west-3.compute.amazonaws.com"
+            }
+            steps {
+                sshagent(credentials: ['SSH_AUTH_PROD']) {
+                    sh '''
+                        [ -d ~/.ssh ] || mkdir ~/.ssh && chmod 0700 ~/.ssh
+                        ssh-keyscan -t rsa,dsa ${HOSTNAME_DEPLOY_PROD} >> ~/.ssh/known_hosts
+                        command1="docker login -u $DOCKERHUB_AUTH_USR -p $DOCKERHUB_AUTH_PSW"
+                        command2="docker pull $DOCKERHUB_AUTH_USR/$IMAGE_NAME:$IMAGE_TAG"
+                        command3="docker rm -f webapp || echo 'app does not exist'"
+                        command4="docker run -d -p 80:5000 -e PORT=5000 --name webapp $DOCKERHUB_AUTH_USR/$IMAGE_NAME:$IMAGE_TAG"
+                        ssh -t centos@${HOSTNAME_DEPLOY_PROD} \
+                            -o SendEnv=IMAGE_NAME \
+                            -o SendEnv=IMAGE_TAG \
+                            -o SendEnv=DOCKERHUB_AUTH_USR \
+                            -o SendEnv=DOCKERHUB_AUTH_PSW \
+                            -C "$command1 && $command2 && $command3 && $command4"
+                    '''
+                }
+            }
+        }
+
+    }
 }
