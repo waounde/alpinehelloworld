@@ -9,16 +9,16 @@ pipeline {
         HOSTNAME_DEPLOY_STAGING = "ec2-13-37-227-8.eu-west-3.compute.amazonaws.com"
         SSH_CREDENTIALS_STAGING = 'SSH_AUTH_SERVER'
         SSH_CREDENTIALS_PROD = 'SSH_AUTH_PROD'
+        DOCKERHUB_AUTH_USR = "${DOCKERHUB_AUTH_USR}"  // Utilisation de l'identifiant de connexion
+        DOCKERHUB_AUTH_PSW = "${DOCKERHUB_AUTH_PSW}"  // Utilisation du mot de passe de connexion
     }
     stages {
         stage('Build Docker Image') {
             agent any
             steps {
                 script {
-                    sh '''
-                        echo "Building Docker image..."
-                        docker build -t ${DOCKERHUB_AUTH_USR}/${IMAGE_NAME}:${IMAGE_TAG} .
-                    '''
+                    echo "Building Docker image..."
+                    sh "docker build -t ${DOCKERHUB_AUTH_USR}/${IMAGE_NAME}:${IMAGE_TAG} ."
                 }
             }
         }
@@ -27,13 +27,11 @@ pipeline {
             agent any
             steps {
                 script {
-                    sh '''
-                        echo "Cleaning up existing container..."
-                        docker rm -f ${IMAGE_NAME} || echo "No existing container to remove"
-                        echo "Running container locally..."
-                        docker run --name ${IMAGE_NAME} -d -p ${PORT_EXPOSED}:5000 -e PORT=5000 ${DOCKERHUB_AUTH_USR}/${IMAGE_NAME}:${IMAGE_TAG}
-                        sleep 5
-                    '''
+                    echo "Cleaning up existing container..."
+                    sh "docker rm -f ${IMAGE_NAME} || echo 'No existing container to remove'"
+                    echo "Running container locally..."
+                    sh "docker run --name ${IMAGE_NAME} -d -p ${PORT_EXPOSED}:5000 -e PORT=5000 ${DOCKERHUB_AUTH_USR}/${IMAGE_NAME}:${IMAGE_TAG}"
+                    sleep 5
                 }
             }
         }
@@ -42,10 +40,8 @@ pipeline {
             agent any
             steps {
                 script {
-                    sh '''
-                        echo "Testing local container..."
-                        curl -s http://localhost:${PORT_EXPOSED} | grep -q "Hello world Lewis!" || exit 1
-                    '''
+                    echo "Testing local container..."
+                    sh "curl -s http://localhost:${PORT_EXPOSED} | grep -q 'Hello world Lewis!' || exit 1"
                 }
             }
         }
@@ -54,12 +50,10 @@ pipeline {
             agent any
             steps {
                 script {
-                    sh '''
-                        echo "Logging into Docker Hub..."
-                        docker login -u ${DOCKERHUB_AUTH_USR} -p ${DOCKERHUB_AUTH_PSW}
-                        echo "Pushing Docker image to Docker Hub..."
-                        docker push ${DOCKERHUB_AUTH_USR}/${IMAGE_NAME}:${IMAGE_TAG}
-                    '''
+                    echo "Logging into Docker Hub..."
+                    sh "docker login -u ${DOCKERHUB_AUTH_USR} -p ${DOCKERHUB_AUTH_PSW}"
+                    echo "Pushing Docker image to Docker Hub..."
+                    sh "docker push ${DOCKERHUB_AUTH_USR}/${IMAGE_NAME}:${IMAGE_TAG}"
                 }
             }
         }
@@ -86,10 +80,8 @@ pipeline {
             agent any
             steps {
                 script {
-                    sh '''
-                        echo "Testing Staging environment..."
-                        curl -s http://${HOSTNAME_DEPLOY_STAGING} | grep -q "Hello world!" || exit 1
-                    '''
+                    echo "Testing Staging environment..."
+                    sh "curl -s http://${HOSTNAME_DEPLOY_STAGING} | grep -q 'Hello world!' || exit 1"
                 }
             }
         }
@@ -116,10 +108,8 @@ pipeline {
             agent any
             steps {
                 script {
-                    sh '''
-                        echo "Testing Production environment..."
-                        curl -s http://${HOSTNAME_DEPLOY_PROD} | grep -q "Hello world!" || exit 1
-                    '''
+                    echo "Testing Production environment..."
+                    sh "curl -s http://${HOSTNAME_DEPLOY_PROD} | grep -q 'Hello world!' || exit 1"
                 }
             }
         }
