@@ -1,11 +1,11 @@
 pipeline {
     agent none
     environment {
-        DOCKERHUB_AUTH = credentials('docker') // Prendre en compte l'identification Docker Hub
-        ID_DOCKER = "${DOCKERHUB_AUTH_USR}"
+        DOCKERHUB_AUTH = credentials('docker')  // Prendre en compte l'identification Docker Hub
+        ID_DOCKER = "${DOCKERHUB_AUTH_USR}"    // Utilisation du secret pour l'utilisateur Docker
         PORT_EXPOSED = "80"
-        IMAGE_NAME = "alpinehelloworld"  // Définir IMAGE_NAME si ce n'est pas déjà défini
-        IMAGE_TAG = "latest"            // Définir IMAGE_TAG si ce n'est pas déjà défini
+        IMAGE_NAME = "alpinehelloworld"         // Définir IMAGE_NAME si ce n'est pas déjà défini
+        IMAGE_TAG = "latest"                   // Définir IMAGE_TAG si ce n'est pas déjà défini
     }
     stages {
         stage('Build Image') {
@@ -83,25 +83,21 @@ pipeline {
                 HOSTNAME_DEPLOY_STAGING = "ec2-13-37-227-8.eu-west-3.compute.amazonaws.com"
             }
             steps {
-                sshagent(credentials: ['SSH_AUTH_SERVER']) {
-                    echo "Deploying to staging server..."
+                script {
                     sh '''
-                        # Préparer l'environnement SSH
-                        [ -d ~/.ssh ] || mkdir -p ~/.ssh && chmod 0700 ~/.ssh
+                        # Configurer les clés SSH manuellement
+                        mkdir -p ~/.ssh
+                        cp /path/to/your/private_key ~/.ssh/id_rsa
+                        chmod 600 ~/.ssh/id_rsa
                         ssh-keyscan -t rsa,dsa ${HOSTNAME_DEPLOY_STAGING} >> ~/.ssh/known_hosts
-
-                        # Déployer l'image sur le serveur de staging
+                        
+                        # Déployer l'application
                         command1="docker login -u ${DOCKERHUB_AUTH_USR} -p ${DOCKERHUB_AUTH_PSW}"
                         command2="docker pull ${DOCKERHUB_AUTH_USR}/${IMAGE_NAME}:${IMAGE_TAG}"
                         command3="docker rm -f webapp || echo 'App does not exist'"
                         command4="docker run -d -p 80:5000 -e PORT=5000 --name webapp ${DOCKERHUB_AUTH_USR}/${IMAGE_NAME}:${IMAGE_TAG}"
                         
-                        ssh -t centos@${HOSTNAME_DEPLOY_STAGING} \
-                            -o SendEnv=IMAGE_NAME \
-                            -o SendEnv=IMAGE_TAG \
-                            -o SendEnv=DOCKERHUB_AUTH_USR \
-                            -o SendEnv=DOCKERHUB_AUTH_PSW \
-                            -C "$command1 && $command2 && $command3 && $command4"
+                        ssh -t centos@${HOSTNAME_DEPLOY_STAGING} "$command1 && $command2 && $command3 && $command4"
                     '''
                 }
             }
