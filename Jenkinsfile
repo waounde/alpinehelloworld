@@ -5,7 +5,7 @@ pipeline {
         ID_DOCKER = "${DOCKERHUB_AUTH_USR}"
         PORT_EXPOSED = "80"
         IMAGE_NAME = "webap"
-        IMAGE_TAG = "v2.4"
+        IMAGE_TAG = "v2.5"
     }
     stages {
         stage ('Build image') {
@@ -69,7 +69,7 @@ pipeline {
         stage ('Deploy in staging') {
             agent any
             environment {
-                HOSTNAME_DEPLOY_STAGING = "54.210.241.199"
+                HOSTNAME_DEPLOY_STAGING = "3.93.173.80"
             }
             steps {
                 sshagent(credentials: ['SSH_AUTH_SERVER']) {
@@ -94,7 +94,7 @@ pipeline {
         stage ('Deploy in prod') {
             agent any
             environment {
-                HOSTNAME_DEPLOY_PROD = "13.218.90.35"
+                HOSTNAME_DEPLOY_PROD = "18.234.64.17"
             }
             steps {
                 sshagent(credentials: ['SSH_AUTH_SERVER']) {
@@ -117,4 +117,13 @@ pipeline {
         }
 
     }
+    post {
+        success {
+            slackSend (color: '#00FF00', message: "SUCCESSFUL: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (${env.BUILD_URL})")
+        }
+        failure {
+            slackSend (color: '#FF0000', message: "FAILED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (${env.BUILD_URL})")
+        }   
+    }
+    
 }
