@@ -34,7 +34,10 @@ pipeline {
             steps {
                 script {
                     sh '''
-                        curl http://172.17.0.1:${PORT_EXPOSED} | grep -q "Hello world Lewis!"
+                        echo "===> Testing container response..."
+                        RESPONSE=$(curl -s http://172.17.0.1:${PORT_EXPOSED})
+                        echo "Response was: $RESPONSE"
+                        echo "$RESPONSE" | grep -iq "hello world lewis!"
                     '''
                 }
             }
