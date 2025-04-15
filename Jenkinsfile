@@ -1,4 +1,3 @@
-#test
 pipeline {
     agent none
     environment {
@@ -7,26 +6,26 @@ pipeline {
         PORT_EXPOSED = "80"
     }
     stages {
-        stage ('Build Image') {
+        stage('Build Image') {
             agent any
             steps {
                 script {
-                    sh 'docker build -t ${ID_DOCKER}/${IMAGE_NAME}:${IMAGE_TAG} .'
+                    sh "docker build -t ${ID_DOCKER}/${IMAGE_NAME}:${IMAGE_TAG} ."
                 }
             }
         }
 
-        stage('Run container based on builded image') {
+        stage('Run container based on built image') {
             agent any
             steps {
-               script {
-                 sh '''
-                    echo "Clean Environment"
-                    docker rm -f $IMAGE_NAME || echo "container does not exist"
-                    docker run --name $IMAGE_NAME -d -p ${PORT_EXPOSED}:5000 -e PORT=5000 ${ID_DOCKER}/$IMAGE_NAME:$IMAGE_TAG
-                    sleep 5
-                 '''
-               }
+                script {
+                    sh '''
+                        echo "Clean Environment"
+                        docker rm -f $IMAGE_NAME || echo "container does not exist"
+                        docker run --name $IMAGE_NAME -d -p ${PORT_EXPOSED}:5000 -e PORT=5000 ${ID_DOCKER}/$IMAGE_NAME:$IMAGE_TAG
+                        sleep 5
+                    '''
+                }
             }
         }
 
@@ -53,8 +52,8 @@ pipeline {
             }
         }
 
-        stage ('Login and Push Image on docker hub') {
-            agent any           
+        stage('Login and Push Image to Docker Hub') {
+            agent any
             steps {
                 script {
                     sh '''
@@ -65,7 +64,7 @@ pipeline {
             }
         }
 
-        stage ('Deploy in staging') {
+        stage('Deploy to Staging') {
             agent any
             environment {
                 HOSTNAME_DEPLOY_STAGING = "ec2-13-48-44-234.eu-north-1.compute.amazonaws.com"
@@ -90,7 +89,7 @@ pipeline {
             }
         }
 
-        stage ('Deploy in prod') {
+        stage('Deploy to Production') {
             agent any
             environment {
                 HOSTNAME_DEPLOY_PROD = "ec2-13-60-186-40.eu-north-1.compute.amazonaws.com"
@@ -114,6 +113,5 @@ pipeline {
                 }
             }
         }
-
     }
 }
