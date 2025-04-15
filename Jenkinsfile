@@ -1,9 +1,11 @@
 pipeline {
     agent none
     environment {
-        DOCKERHUB_AUTH = credentials('docker')
+        DOCKERHUB_AUTH = credentials('DOCKERHUB_AUTH')
         ID_DOCKER = "${DOCKERHUB_AUTH_USR}"
         PORT_EXPOSED = "80"
+        HOSTNAME_DEPLOY_PROD = "ec2-13-60-186-40.eu-north-1.compute.amazonaws.com"
+        HOSTNAME_DEPLOY_STAGING = "ec2-13-48-44-234.eu-north-1.compute.amazonaws.com"
     }
     stages {
         stage ('Build Image') {
@@ -66,9 +68,6 @@ pipeline {
 
         stage ('Deploy in staging') {
             agent any
-            environment {
-                HOSTNAME_DEPLOY_STAGING = "ec2-13-48-44-234.eu-north-1.compute.amazonaws.com"
-            }
             steps {
                 sshagent(credentials: ['SSH_AUTH_SERVER']) {
                     sh '''
@@ -89,11 +88,19 @@ pipeline {
             }
         }
 
+         stage('Test Staging') {
+            agent any
+            steps {
+              script {
+                sh '''
+                  curl ${HOSTNAME_DEPLOY_STAGING} | grep -q "Hello world!"
+                '''
+              }
+            }
+        }
+
         stage ('Deploy in prod') {
             agent any
-            environment {
-                HOSTNAME_DEPLOY_PROD = "ec2-13-60-186-40.eu-north-1.compute.amazonaws.com"
-            }
             steps {
                 sshagent(credentials: ['SSH_AUTH_PROD']) {
                     sh '''
@@ -114,5 +121,25 @@ pipeline {
             }
         }
 
+        stage('Test Prod') {
+          agent any
+          steps {
+             script {
+               sh '''
+                 curl ${HOSTNAME_DEPLOY_PROD} | grep -q "Hello world!"
+               '''
+             }
+          }
+        }
+
+    }
+
+    post {
+        success {
+            slackSend (color: '#00FF00', message: "SUCCESSFUL: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (${env.BUILD_URL})")
+        }
+        failure {
+            slackSend (color: '#FF0000', message: "FAILED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (${env.BUILD_URL})")
+        }   
     }
 }
