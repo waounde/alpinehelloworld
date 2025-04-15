@@ -1,7 +1,7 @@
 pipeline {
     agent none
     environment {
-        DOCKERHUB_AUTH = credentials('docker')
+        DOCKERHUB_AUTH = credentials('ID_DOCKER')
         ID_DOCKER = "${DOCKERHUB_AUTH_USR}"
         PORT_EXPOSED = "80"
         HOSTNAME_DEPLOY_PROD = "ec2-13-60-186-40.eu-north-1.compute.amazonaws.com"
