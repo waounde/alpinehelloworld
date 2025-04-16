@@ -3,7 +3,7 @@ pipeline {
     environment {
         DOCKERHUB_AUTH = credentials('DOCKERHUB_AUTH')
         ID_DOCKER = "${DOCKERHUB_AUTH_USR}"
-        PORT_EXPOSED = "80"
+        PORT_EXPOSED = "90"
         IMAGE_NAME = "alpinehelloworld"
         IMAGE_TAG = "latest"
     }
@@ -79,8 +79,8 @@ pipeline {
                         ssh ubuntu@${HOSTNAME_DEPLOY_STAGING} "
                             echo \"$DOCKERHUB_AUTH_PSW\" | docker login -u $DOCKERHUB_AUTH_USR --password-stdin
                             docker pull $DOCKERHUB_AUTH_USR/$IMAGE_NAME:$IMAGE_TAG
-                            docker rm -f webapp || true
-                            docker run -d -p 80:5000 -e PORT=5000 --name webapp $DOCKERHUB_AUTH_USR/$IMAGE_NAME:$IMAGE_TAG
+                            docker rm -f waounde || true
+                            docker run -d -p 80:5000 -e PORT=5000 --name waounde $DOCKERHUB_AUTH_USR/$IMAGE_NAME:$IMAGE_TAG
                         "
                     '''
                 }
@@ -100,8 +100,8 @@ pipeline {
                         ssh ubuntu@${HOSTNAME_DEPLOY_PROD} "
                             echo \"$DOCKERHUB_AUTH_PSW\" | docker login -u $DOCKERHUB_AUTH_USR --password-stdin
                             docker pull $DOCKERHUB_AUTH_USR/$IMAGE_NAME:$IMAGE_TAG
-                            docker rm -f webapp || true
-                            docker run -d -p 80:5000 -e PORT=5000 --name webapp $DOCKERHUB_AUTH_USR/$IMAGE_NAME:$IMAGE_TAG
+                            docker rm -f waounde || true
+                            docker run -d -p 90:5000 -e PORT=5000 --name waounde $DOCKERHUB_AUTH_USR/$IMAGE_NAME:$IMAGE_TAG
                         "
                     '''
                 }
