@@ -1,14 +1,15 @@
+@Library('shared-library@main')_
 pipeline {
     agent none
     environment {
-        DOCKERHUB_AUTH = credentials('docker')
+        DOCKERHUB_AUTH = credentials('DOCKERHUB_AUTH')
         ID_DOCKER = "${DOCKERHUB_AUTH_USR}"
         PORT_EXPOSED = "80"
-        HOSTNAME_DEPLOY_PROD = "ec2-13-60-186-40.eu-north-1.compute.amazonaws.com"
-        HOSTNAME_DEPLOY_STAGING = "ec2-13-48-44-234.eu-north-1.compute.amazonaws.com"
+        IMAGE_NAME = "alpinehelloworld"
+        IMAGE_TAG = "latest"
     }
     stages {
-        stage ('Build Image') {
+        stage ('Build images') {
             agent any
             steps {
                 script {
@@ -36,7 +37,7 @@ pipeline {
             steps {
                 script {
                     sh '''
-                        curl http://172.17.0.1:${PORT_EXPOSED} | grep -q "Hello world Lewis!"
+                        curl http://172.17.0.1:${PORT_EXPOSED} | grep -q "Hello world!"
                     '''
                 }
             }
@@ -68,6 +69,9 @@ pipeline {
 
         stage ('Deploy in staging') {
             agent any
+            environment {
+                HOSTNAME_DEPLOY_STAGING = "16.170.225.83"
+            }
             steps {
                 sshagent(credentials: ['SSH_AUTH_SERVER']) {
                     sh '''
@@ -77,7 +81,7 @@ pipeline {
                         command2="docker pull $DOCKERHUB_AUTH_USR/$IMAGE_NAME:$IMAGE_TAG"
                         command3="docker rm -f webapp || echo 'app does not exist'"
                         command4="docker run -d -p 80:5000 -e PORT=5000 --name webapp $DOCKERHUB_AUTH_USR/$IMAGE_NAME:$IMAGE_TAG"
-                        ssh -t centos@${HOSTNAME_DEPLOY_STAGING} \
+                        ssh -t ubuntu@${HOSTNAME_DEPLOY_STAGING} \
                             -o SendEnv=IMAGE_NAME \
                             -o SendEnv=IMAGE_TAG \
                             -o SendEnv=DOCKERHUB_AUTH_USR \
@@ -88,21 +92,13 @@ pipeline {
             }
         }
 
-         stage('Test Staging') {
-            agent any
-            steps {
-              script {
-                sh '''
-                  curl ${HOSTNAME_DEPLOY_STAGING} | grep -q "Hello world!"
-                '''
-              }
-            }
-        }
-
         stage ('Deploy in prod') {
             agent any
+            environment {
+                HOSTNAME_DEPLOY_PROD = "56.228.42.215"
+            }
             steps {
-                sshagent(credentials: ['SSH_AUTH_PROD']) {
+                sshagent(credentials: ['SSH_AUTH_SERVER']) {
                     sh '''
                         [ -d ~/.ssh ] || mkdir ~/.ssh && chmod 0700 ~/.ssh
                         ssh-keyscan -t rsa,dsa ${HOSTNAME_DEPLOY_PROD} >> ~/.ssh/known_hosts
@@ -110,7 +106,7 @@ pipeline {
                         command2="docker pull $DOCKERHUB_AUTH_USR/$IMAGE_NAME:$IMAGE_TAG"
                         command3="docker rm -f webapp || echo 'app does not exist'"
                         command4="docker run -d -p 80:5000 -e PORT=5000 --name webapp $DOCKERHUB_AUTH_USR/$IMAGE_NAME:$IMAGE_TAG"
-                        ssh -t centos@${HOSTNAME_DEPLOY_PROD} \
+                        ssh -t ubuntu@${HOSTNAME_DEPLOY_PROD} \
                             -o SendEnv=IMAGE_NAME \
                             -o SendEnv=IMAGE_TAG \
                             -o SendEnv=DOCKERHUB_AUTH_USR \
@@ -121,25 +117,14 @@ pipeline {
             }
         }
 
-        stage('Test Prod') {
-          agent any
-          steps {
-             script {
-               sh '''
-                 curl ${HOSTNAME_DEPLOY_PROD} | grep -q "Hello world!"
-               '''
-             }
-          }
-        }
-
     }
-
     post {
-        success {
-            slackSend (color: '#00FF00', message: "SUCCESSFUL: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (${env.BUILD_URL})")
-        }
-        failure {
-            slackSend (color: '#FF0000', message: "FAILED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (${env.BUILD_URL})")
-        }   
+     always {
+               script {
+                 /* Use slackNotifier.groovy from shared library and provide current build result as parameter*/
+                 slackNotifier currentBuild.result
+               }
+     } 
     }
+    
 }
