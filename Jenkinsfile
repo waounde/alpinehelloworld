@@ -1,4 +1,3 @@
-@Library('shared-library@main')_
 pipeline {
     agent none
     environment {
@@ -18,7 +17,7 @@ pipeline {
             }
         }
 
-        stage('Run container based on built image') {
+        stage('Run container') {
             agent any
             steps {
                 script {
@@ -55,7 +54,7 @@ pipeline {
             }
         }
 
-        stage('Login and Push Image to Docker Hub') {
+        stage('Push to Docker Hub') {
             agent any           
             steps {
                 script {
@@ -112,9 +111,10 @@ pipeline {
     post {
         always {
             script {
-                /* Use slackNotifier.groovy from shared library and provide current build result as parameter*/
-                slackNotifier currentBuild.result
+                // Notification Slack basique
+                slackSend color: currentBuild.result == 'SUCCESS' ? 'good' : 'danger',
+                         message: "Build ${currentBuild.result}: ${env.JOB_NAME} ${env.BUILD_NUMBER}"
             }
-        } 
+        }
     }
 }
