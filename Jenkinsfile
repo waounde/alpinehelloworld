@@ -1,4 +1,4 @@
-@Library('shared-library@main')
+@Library('shared-library@main')_
 pipeline {
     agent none
     environment {
@@ -9,7 +9,7 @@ pipeline {
         IMAGE_TAG = "latest"
     }
     stages {
-        stage('Build images') {
+        stage('Build image') {
             agent any
             steps {
                 script {
@@ -23,8 +23,8 @@ pipeline {
             steps {
                 script {
                     sh '''
-                        echo "Clean Environment"
-                        docker ps -a | grep -q $IMAGE_NAME && docker rm -f $IMAGE_NAME || echo "Container does not exist"
+                        echo "Cleaning Environment"
+                        docker rm -f $IMAGE_NAME || true
                         docker run --name $IMAGE_NAME -d -p ${PORT_EXPOSED}:5000 -e PORT=5000 ${ID_DOCKER}/$IMAGE_NAME:$IMAGE_TAG
                         sleep 5
                     '''
@@ -37,7 +37,7 @@ pipeline {
             steps {
                 script {
                     sh '''
-                        curl http://172.17.0.1:${PORT_EXPOSED} | grep -q "Hello world!"
+                        curl -f http://localhost:${PORT_EXPOSED} | grep -q "Hello world!"
                     '''
                 }
             }
@@ -48,26 +48,26 @@ pipeline {
             steps {
                 script {
                     sh '''
-                        docker stop $IMAGE_NAME
-                        docker rm $IMAGE_NAME
+                        docker stop $IMAGE_NAME || true
+                        docker rm $IMAGE_NAME || true
                     '''
                 }
             }
         }
 
-        stage('Login and Push Image on Docker Hub') {
-            agent any
+        stage('Login and Push Image to Docker Hub') {
+            agent any           
             steps {
                 script {
                     sh '''
-                        docker login -u $DOCKERHUB_AUTH_USR -p $DOCKERHUB_AUTH_PSW
+                        echo "$DOCKERHUB_AUTH_PSW" | docker login -u $DOCKERHUB_AUTH_USR --password-stdin
                         docker push ${ID_DOCKER}/$IMAGE_NAME:$IMAGE_TAG
                     '''
                 }
             }
         }
 
-        stage('Deploy in staging') {
+        stage('Deploy to staging') {
             agent any
             environment {
                 HOSTNAME_DEPLOY_STAGING = "16.170.225.83"
@@ -75,24 +75,20 @@ pipeline {
             steps {
                 sshagent(credentials: ['SSH_AUTH_SERVER']) {
                     sh '''
-                        [ -d ~/.ssh ] || mkdir ~/.ssh && chmod 0700 ~/.ssh
-                        ssh-keyscan -t rsa,dsa ${HOSTNAME_DEPLOY_STAGING} >> ~/.ssh/known_hosts
-                        command1="docker login -u $DOCKERHUB_AUTH_USR -p $DOCKERHUB_AUTH_PSW"
-                        command2="docker pull $DOCKERHUB_AUTH_USR/$IMAGE_NAME:$IMAGE_TAG"
-                        command3="docker rm -f webapp || echo 'app does not exist'"
-                        command4="docker run -d -p 80:5000 -e PORT=5000 --name webapp $DOCKERHUB_AUTH_USR/$IMAGE_NAME:$IMAGE_TAG"
-                        ssh -t ubuntu@${HOSTNAME_DEPLOY_STAGING} \
-                            -o SendEnv=IMAGE_NAME \
-                            -o SendEnv=IMAGE_TAG \
-                            -o SendEnv=DOCKERHUB_AUTH_USR \
-                            -o SendEnv=DOCKERHUB_AUTH_PSW \
-                            -C "$command1 && $command2 && $command3 && $command4"
+                        [ -d ~/.ssh ] || mkdir -p ~/.ssh && chmod 0700 ~/.ssh
+                        ssh-keyscan -H ${HOSTNAME_DEPLOY_STAGING} >> ~/.ssh/known_hosts 2>/dev/null
+                        ssh ubuntu@${HOSTNAME_DEPLOY_STAGING} "
+                            echo \"$DOCKERHUB_AUTH_PSW\" | docker login -u $DOCKERHUB_AUTH_USR --password-stdin
+                            docker pull $DOCKERHUB_AUTH_USR/$IMAGE_NAME:$IMAGE_TAG
+                            docker rm -f webapp || true
+                            docker run -d -p 80:5000 -e PORT=5000 --name webapp $DOCKERHUB_AUTH_USR/$IMAGE_NAME:$IMAGE_TAG
+                        "
                     '''
                 }
             }
         }
 
-        stage('Deploy in prod') {
+        stage('Deploy to production') {
             agent any
             environment {
                 HOSTNAME_DEPLOY_PROD = "56.228.42.215"
@@ -100,18 +96,14 @@ pipeline {
             steps {
                 sshagent(credentials: ['SSH_AUTH_SERVER']) {
                     sh '''
-                        [ -d ~/.ssh ] || mkdir ~/.ssh && chmod 0700 ~/.ssh
-                        ssh-keyscan -t rsa,dsa ${HOSTNAME_DEPLOY_PROD} >> ~/.ssh/known_hosts
-                        command1="docker login -u $DOCKERHUB_AUTH_USR -p $DOCKERHUB_AUTH_PSW"
-                        command2="docker pull $DOCKERHUB_AUTH_USR/$IMAGE_NAME:$IMAGE_TAG"
-                        command3="docker rm -f webapp || echo 'app does not exist'"
-                        command4="docker run -d -p 80:5000 -e PORT=5000 --name webapp $DOCKERHUB_AUTH_USR/$IMAGE_NAME:$IMAGE_TAG"
-                        ssh -t ubuntu@${HOSTNAME_DEPLOY_PROD} \
-                            -o SendEnv=IMAGE_NAME \
-                            -o SendEnv=IMAGE_TAG \
-                            -o SendEnv=DOCKERHUB_AUTH_USR \
-                            -o SendEnv=DOCKERHUB_AUTH_PSW \
-                            -C "$command1 && $command2 && $command3 && $command4"
+                        [ -d ~/.ssh ] || mkdir -p ~/.ssh && chmod 0700 ~/.ssh
+                        ssh-keyscan -H ${HOSTNAME_DEPLOY_PROD} >> ~/.ssh/known_hosts 2>/dev/null
+                        ssh ubuntu@${HOSTNAME_DEPLOY_PROD} "
+                            echo \"$DOCKERHUB_AUTH_PSW\" | docker login -u $DOCKERHUB_AUTH_USR --password-stdin
+                            docker pull $DOCKERHUB_AUTH_USR/$IMAGE_NAME:$IMAGE_TAG
+                            docker rm -f webapp || true
+                            docker run -d -p 80:5000 -e PORT=5000 --name webapp $DOCKERHUB_AUTH_USR/$IMAGE_NAME:$IMAGE_TAG
+                        "
                     '''
                 }
             }
@@ -120,9 +112,9 @@ pipeline {
     post {
         always {
             script {
-                /* Utilisation de slackNotifier.groovy depuis la bibliothèque partagée et en passant le résultat actuel du build comme paramètre */
+                /* Use slackNotifier.groovy from shared library and provide current build result as parameter*/
                 slackNotifier currentBuild.result
             }
-        }
+        } 
     }
 }
